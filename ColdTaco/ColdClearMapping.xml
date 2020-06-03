@@ -16,7 +16,7 @@
         <map param="cc_\w+_weights::weights" attribute="out" />
         <map param="cc_launch_async::options" attribute="in" />
         <map param="cc_launch_async::weights" attribute="in" />
-        <map param="cc_reset_async::field" attribute="out" />
+        <map param="cc_reset_async::field" attribute="buffer" type="bool" />
         <map function="cc_destroy_async" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />
         <map function="cc_launch_async" type="void" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />
         <map function="cc_reset_async" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />
