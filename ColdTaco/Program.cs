@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Linq;
 using System.Diagnostics;
+using System.Text;
 
 namespace ColdTaco
 {
@@ -16,16 +17,23 @@ namespace ColdTaco
         public const int CURRENT_PIECE_ID = 0x0042;
         public const int NEXT_PIECE_ID = 0x00BF;
         public const int GAME_STATE = 0x0048;
+        public const int CLEARED_LINES = 0x0056;
     }
     class Program
     {
-        static readonly IEnumerator<int> player = Play().GetEnumerator();
-        static int framesToWait = 0;
-        static bool softDrop = false;
-        static readonly CCPiece[] tetriminoMap = new CCPiece[19];
-        static readonly Queue<int> inputs = new Queue<int>();
-        static int currentInput = -1;
+        static CCPiece[] tetriminoMap;
+        static Queue<int> inputs;
+        static int currentInput;
+        static IntPtr bot;
+        const int thinkFrames = 3;
+        static int prevGameState;
+        static int framesSinceSpawn;
+        static int[] lineClears;
+        const int lineClearStatRectX = 185;
+        const int lineClearStatRectY = 185;
+        const int lineClearStatRectPadding = 2;
         static void Main(string[] args) {
+            Init();
             ApiSource.initRemoteAPI("localhost", args.Length > 1 ? int.Parse(args[1]) : 9999);
             ApiSource.API.addFrameListener(RenderFinished);
             ApiSource.API.addStatusListener(StatusChanged);
@@ -34,19 +42,157 @@ namespace ColdTaco
             ApiSource.API.addStopListener(Dispose);
             ApiSource.API.run();
         }
-        static IEnumerable<int> Play() {
-            for (int i = 0; i < tetriminoMap.Length; i++) {
-                tetriminoMap[i] = ApiSource.API.peekCPU(Addresses.TETRIMINO_TYPE_TABLE + i) switch {
-                    0 => CCPiece.CcT,
-                    1 => CCPiece.CcJ,
-                    2 => CCPiece.CcZ,
-                    3 => CCPiece.CcO,
-                    4 => CCPiece.CcS,
-                    5 => CCPiece.CcL,
-                    6 => CCPiece.CcI,
-                    _ => throw new InvalidOperationException("Invalid piece type!")
-                };
+        static void Init() {
+            tetriminoMap = null;
+            bot = IntPtr.Zero;
+            inputs = new Queue<int>();
+            currentInput = -1;
+            prevGameState = 0;
+            framesSinceSpawn = 0;
+            lineClears = new int[4];
+        }
+        static void InputPolled() {
+            if (currentInput == -1) {
+                if (inputs.TryDequeue(out currentInput)) {
+                    ApiSource.API.writeGamepad(0, currentInput, true);
+                } else {
+                    ApiSource.API.writeGamepad(0, GamepadButtons.Down, framesSinceSpawn > thinkFrames);
+                    currentInput = -1;
+                }
+            } else {
+                ApiSource.API.writeGamepad(0, currentInput, false);
+                currentInput = -1;
             }
+        }
+        static void RenderFinished() {
+            int gameState = ApiSource.API.peekCPU(Addresses.GAME_STATE);
+            if (gameState == 0) {
+                return;
+            }
+            if (tetriminoMap == null) {
+                tetriminoMap = new CCPiece[19];
+                for (int i = 0; i < tetriminoMap.Length; i++) {
+                    tetriminoMap[i] = ApiSource.API.peekCPU(Addresses.TETRIMINO_TYPE_TABLE + i) switch {
+                        0 => CCPiece.CcT,
+                        1 => CCPiece.CcJ,
+                        2 => CCPiece.CcZ,
+                        3 => CCPiece.CcO,
+                        4 => CCPiece.CcS,
+                        5 => CCPiece.CcL,
+                        6 => CCPiece.CcI,
+                        _ => throw new InvalidOperationException("Invalid piece type!")
+                    };
+                }
+            }
+            if (gameState == 4 && prevGameState != 4) {
+                ++lineClears[ApiSource.API.peekCPU(Addresses.CLEARED_LINES) - 1];
+            }
+            if (gameState == 1 && (prevGameState == 8 || prevGameState == 0)) {
+                if (prevGameState == 0) {
+                    ApiSource.API.addControllersListener(InputPolled);
+                    ColdClear.CcAddNextPieceAsync(bot, tetriminoMap[ApiSource.API.peekCPU(Addresses.CURRENT_PIECE_ID)]);
+                }
+                ColdClear.CcAddNextPieceAsync(bot, tetriminoMap[ApiSource.API.peekCPU(Addresses.NEXT_PIECE_ID)]);
+                framesSinceSpawn = 0;
+            }
+            if (framesSinceSpawn == thinkFrames) {
+                CCPiece current = tetriminoMap[ApiSource.API.peekCPU(Addresses.CURRENT_PIECE_ID)];
+                ColdClear.CcRequestNextMove(bot, 0);
+                ColdClear.CcBlockNextMove(bot, out CCMove move, out _, 0);
+                int movements = 0;
+                int rotation = 0;
+                foreach (CCMovement movement in move.Movements.Take(move.MovementCount)) {
+                    if (current == CCPiece.CcI || current == CCPiece.CcS || current == CCPiece.CcZ) {
+                        if (movement == CCMovement.CcCcw) {
+                            switch (rotation) {
+                                case 0:
+                                    --movements;
+                                    break;
+                                case 3:
+                                    ++movements;
+                                    break;
+                            }
+                                
+                        }
+                        if (movement == CCMovement.CcCw) {
+                            switch (rotation) {
+                                case 2:
+                                    --movements;
+                                    break;
+                                case 3:
+                                    ++movements;
+                                    break;
+                            }
+                        }
+                    }
+                    switch (movement) {
+                        case CCMovement.CcCcw:
+                            rotation = rotation > 0 ? (rotation - 1) : 3;
+                            break;
+                        case CCMovement.CcCw:
+                            rotation = rotation < 3 ? (rotation + 1) : 0;
+                            break;
+                        case CCMovement.CcLeft:
+                            --movements;
+                            break;
+                        case CCMovement.CcRight:
+                            ++movements;
+                            break;
+                    }
+                }
+                if (current != CCPiece.CcI && current != CCPiece.CcO) {
+                    if (current == CCPiece.CcJ || current == CCPiece.CcL || current == CCPiece.CcT) {
+                        rotation = (rotation + 2) % 4;
+                    }
+                    --movements;
+                }
+                switch (rotation) {
+                    case 1:
+                        inputs.Enqueue(GamepadButtons.A);
+                        break;
+                    case 2:
+                        inputs.Enqueue(GamepadButtons.A);
+                        inputs.Enqueue(GamepadButtons.A);
+                        break;
+                    case 3:
+                        inputs.Enqueue(GamepadButtons.B);
+                        break;
+                    default:
+                        break;
+                }
+                while (movements != 0) {
+                    if (movements > 0) {
+                        inputs.Enqueue(GamepadButtons.Right);
+                        --movements;
+                    } else {
+                        inputs.Enqueue(GamepadButtons.Left);
+                        ++movements;
+                    }
+                }
+            }
+            ++framesSinceSpawn;
+            prevGameState = gameState;
+            ApiSource.API.setColor(Colors.BLACK);
+            int width = ApiSource.API.getStringWidth("Quad 999", true);
+            ApiSource.API.fillRect(lineClearStatRectX, lineClearStatRectY, width + lineClearStatRectPadding * 2, lineClears.Length * 9 + lineClearStatRectPadding * 2);
+            ApiSource.API.setColor(Colors.WHITE);
+            for (int i = 0; i < lineClears.Length; i++) {
+                string text = i switch {
+                    0 => "SING",
+                    1 => "DOBL",
+                    2 => "TRIP",
+                    3 => "QUAD",
+                    _ => "NANI"
+                } + " " + lineClears[i].ToString("D3");
+                ApiSource.API.drawString(text, lineClearStatRectX + lineClearStatRectPadding, lineClearStatRectY + (lineClears.Length - i - 1) * 9 + lineClearStatRectPadding, true);
+            }
+        }
+        static void StatusChanged(string message) {
+            Console.WriteLine("Status message: {0}", message);
+        }
+        static void ApiEnabled() {
+            Console.WriteLine("API enabled");
+            ApiSource.API.reset();
             ColdClear.CcDefaultOptions(out CCOptions options);
             options.Mode = CCMovementMode.CcHardDropOnly;
             options.UseHold = false;
@@ -73,129 +219,11 @@ namespace ColdTaco
             weights.WellColumn[9] = 100;
             weights.Bumpiness = -14;
             weights.BumpinessSq = -12;
-            IntPtr bot = ColdClear.CcLaunchAsync(ref options, ref weights);
-            while (ApiSource.API.peekCPU(Addresses.GAME_STATE) == 0) {
-                yield return 1;
-            }
-            ApiSource.API.addControllersListener(InputPolled);
-            int prevGameState = 0;
-            int framesSinceSpawn = -1;
-            while (true) {
-                int gameState = ApiSource.API.peekCPU(Addresses.GAME_STATE);
-                if ((prevGameState == 8 || prevGameState == 0) && gameState == 1) {
-                    if (prevGameState == 0) {
-                        ColdClear.CcAddNextPieceAsync(bot, tetriminoMap[ApiSource.API.peekCPU(Addresses.CURRENT_PIECE_ID)]);
-                    }
-                    ColdClear.CcAddNextPieceAsync(bot, tetriminoMap[ApiSource.API.peekCPU(Addresses.NEXT_PIECE_ID)]);
-                    framesSinceSpawn = 0;
-                    softDrop = false;
-                }
-                if (++framesSinceSpawn == 2) {
-                    CCPiece current = tetriminoMap[ApiSource.API.peekCPU(Addresses.CURRENT_PIECE_ID)];
-                    ColdClear.CcRequestNextMove(bot, 0);
-                    ColdClear.CcBlockNextMove(bot, out CCMove move, out _, 0);
-                    int movements = 0;
-                    int rotation = 0;
-                    foreach (CCMovement movement in move.Movements.Take(move.MovementCount)) {
-                        if (current == CCPiece.CcI || current == CCPiece.CcS || current == CCPiece.CcZ) {
-                            if (movement == CCMovement.CcCcw) {
-                                switch (rotation) {
-                                    case 0:
-                                        --movements;
-                                        break;
-                                    case 3:
-                                        ++movements;
-                                        break;
-                                }
-                                
-                            }
-                            if (movement == CCMovement.CcCw) {
-                                switch (rotation) {
-                                    case 2:
-                                        --movements;
-                                        break;
-                                    case 3:
-                                        ++movements;
-                                        break;
-                                }
-                            }
-                        }
-                        switch (movement) {
-                            case CCMovement.CcCcw:
-                                rotation = rotation > 0 ? (rotation - 1) : 3;
-                                break;
-                            case CCMovement.CcCw:
-                                rotation = rotation < 3 ? (rotation + 1) : 0;
-                                break;
-                            case CCMovement.CcLeft:
-                                --movements;
-                                break;
-                            case CCMovement.CcRight:
-                                ++movements;
-                                break;
-                        }
-                    }
-                    if (current != CCPiece.CcI && current != CCPiece.CcO) {
-                        rotation = (rotation + 2) % 4;
-                        --movements;
-                    }
-                    switch (rotation) {
-                        case 1:
-                            inputs.Enqueue(GamepadButtons.A);
-                            break;
-                        case 2:
-                            inputs.Enqueue(GamepadButtons.A);
-                            inputs.Enqueue(GamepadButtons.A);
-                            break;
-                        case 3:
-                            inputs.Enqueue(GamepadButtons.B);
-                            break;
-                        default:
-                            break;
-                    }
-                    while (movements != 0) {
-                        if (movements > 0) {
-                            inputs.Enqueue(GamepadButtons.Right);
-                            --movements;
-                        } else {
-                            inputs.Enqueue(GamepadButtons.Left);
-                            ++movements;
-                        }
-                    }
-                    yield return 1;
-                    softDrop = true;
-                }
-                prevGameState = gameState;
-                yield return 1;
-            }
-        }
-        static void InputPolled() {
-            if (currentInput == -1) {
-                if (inputs.TryDequeue(out currentInput)) {
-                    ApiSource.API.writeGamepad(0, currentInput, true);
-                } else {
-                    ApiSource.API.writeGamepad(0, GamepadButtons.Down, softDrop);
-                    currentInput = -1;
-                }
-            } else {
-                ApiSource.API.writeGamepad(0, currentInput, false);
-                currentInput = -1;
-            }
-        }
-        static void RenderFinished() {
-            if (--framesToWait < 0 && player.MoveNext()) {
-                framesToWait = player.Current;
-            }
-        }
-        static void StatusChanged(string message) {
-            Console.WriteLine("Status message: {0}", message);
-        }
-        static void ApiEnabled() {
-            Console.WriteLine("API enabled");
-            ApiSource.API.reset();
+            bot = ColdClear.CcLaunchAsync(ref options, ref weights);
         }
         static void ApiDisabled() {
-            Console.WriteLine("API disabled");
+            ColdClear.CcDestroyAsync(bot);
+            Init();
         }
         static void Dispose() {
             Console.WriteLine("API stopped");
