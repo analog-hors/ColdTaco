@@ -207,6 +207,7 @@ namespace ColdTaco
             options.UseHold = false;
             options.Pcloop = false;
             options.Speculate = true;
+            //options.Threads = 2;
             ColdClear.CcDefaultWeights(out CCWeights weights);
             weights._Tslot = new int[] {
                 -1000,
@@ -228,6 +229,8 @@ namespace ColdTaco
             weights.WellColumn[9] = 100;
             weights.Bumpiness = -14;
             weights.BumpinessSq = -12;
+            weights.WastedT = 0;
+            weights.Height = -78;
             bot = ColdClear.CcLaunchAsync(ref options, ref weights);
         }
         static void ApiDisabled() {
