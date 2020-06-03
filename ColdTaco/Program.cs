@@ -32,6 +32,7 @@ namespace ColdTaco
         const int lineClearStatRectX = 185;
         const int lineClearStatRectY = 185;
         const int lineClearStatRectPadding = 2;
+        static bool resetComplete = false;
         static void Main(string[] args) {
             Init();
             ApiSource.initRemoteAPI("localhost", args.Length > 1 ? int.Parse(args[1]) : 9999);
@@ -66,8 +67,16 @@ namespace ColdTaco
         }
         static void RenderFinished() {
             int gameState = ApiSource.API.peekCPU(Addresses.GAME_STATE);
-            if (gameState == 0) {
-                return;
+            if (resetComplete) {
+                if (gameState == 0) {
+                    return;
+                }
+            } else {
+                if (gameState == 0) {
+                    resetComplete = true;
+                } else {
+                    return;
+                }
             }
             if (tetriminoMap == null) {
                 tetriminoMap = new CCPiece[19];
@@ -206,7 +215,7 @@ namespace ColdTaco
                 -1000
             };
             weights.Jeopardy = -20;
-            weights.TopHalf = -511;
+            weights.TopHalf = -1000;
             weights.ComboGarbage = 0;
             weights.CavityCells = -173 * 2;
             weights.CavityCellsSq = -3;
