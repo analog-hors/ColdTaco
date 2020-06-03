@@ -19,6 +19,7 @@ namespace ColdTaco
         public const int GAME_STATE = 0x0048;
         public const int CLEARED_LINES = 0x0056;
         public const int BOARD = 0x0400;
+        public const int LEVEL = 0x0044;
     }
     class Program
     {
@@ -36,6 +37,7 @@ namespace ColdTaco
         const int lineClearStatRectPadding = 2;
         static bool resetComplete = false;
         static CCMove move;
+        static int currentLevel;
         static void Main(string[] args) {
             Init();
             ApiSource.initRemoteAPI("localhost", args.Length > 1 ? int.Parse(args[1]) : 9999);
@@ -55,6 +57,7 @@ namespace ColdTaco
             framesSinceSpawn = 0;
             lineClears = new int[4];
             move = new CCMove();
+            currentLevel = 0;
         }
         static void InputPolled() {
             if (currentInput == -1) {
@@ -70,6 +73,15 @@ namespace ColdTaco
             }
         }
         static void RenderFinished() {
+            static void ResetBot() {
+                bool[] field = new bool[400];
+                for (int y = 0; y < 20; y++) {
+                    for (int x = 0; x < 10; x++) {
+                        field[x + (19 - y) * 10] = ApiSource.API.peekCPU(Addresses.BOARD + x + y * 10) != EMPTY_CELL;
+                    }
+                }
+                ColdClear.CcResetAsync(bot, field, false, 0);
+            }
             int gameState = ApiSource.API.peekCPU(Addresses.GAME_STATE);
             if (resetComplete) {
                 if (gameState == 0) {
@@ -100,6 +112,24 @@ namespace ColdTaco
             if (gameState == 4 && prevGameState != 4) {
                 ++lineClears[ApiSource.API.peekCPU(Addresses.CLEARED_LINES) - 1];
             }
+            if (gameState == 6 && prevGameState != 6) {
+                int level = ApiSource.API.peekCPU(Addresses.LEVEL);
+                if (currentLevel != level) {
+                    currentLevel = level;
+                    if (level == 29) {
+                        ColdClear.CcDestroyAsync(bot);
+                        CCOptions options = NESOptions();
+                        CCWeights weights = NESWeights();
+                        weights.Clear1 = 5;
+                        weights.Clear2 = 10;
+                        weights.Clear3 = 20;
+                        weights.MaxWellDepth = 4;
+                        bot = ColdClear.CcLaunchAsync(ref options, ref weights);
+                        ResetBot();
+                        ColdClear.CcAddNextPieceAsync(bot, tetriminoMap[ApiSource.API.peekCPU(Addresses.NEXT_PIECE_ID)]);
+                    }
+                }
+            }
             if (prevGameState == 2 && gameState == 3) {
                 for (int i = 0; i < 4; i++) {
                     int expectedX = move.ExpectedX[i];
@@ -107,13 +137,7 @@ namespace ColdTaco
                     if (ApiSource.API.peekCPU(Addresses.BOARD + expectedX + expectedY * 10) == EMPTY_CELL) {
                         inputs.Clear();
                         Console.WriteLine("Misdropped!");
-                        bool[] field = new bool[400];
-                        for (int y = 0; y < 20; y++) {
-                            for (int x = 0; x < 10; x++) {
-                                field[x + (19 - y) * 10] = ApiSource.API.peekCPU(Addresses.BOARD + x + y * 10) != EMPTY_CELL;
-                            }
-                        }
-                        ColdClear.CcResetAsync(bot, field, false, 0);
+                        ResetBot();
                         break;
                     }
                 }
@@ -250,6 +274,7 @@ namespace ColdTaco
             weights.BumpinessSq = -12;
             weights.WastedT = 0;
             weights.Height = -78;
+            weights.MaxWellDepth = 10;
             return weights;
         }
         static void ApiEnabled() {
