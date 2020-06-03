@@ -221,22 +221,19 @@ namespace ColdTaco
         static void StatusChanged(string message) {
             Console.WriteLine("Status message: {0}", message);
         }
-        static void ApiEnabled() {
-            Console.WriteLine("API enabled");
-            ApiSource.API.reset();
+        static CCOptions NESOptions() {
             ColdClear.CcDefaultOptions(out CCOptions options);
             options.Mode = CCMovementMode.CcHardDropOnly;
             options.UseHold = false;
             options.Pcloop = false;
             options.Speculate = true;
-            //options.Threads = 2;
+            return options;
+        }
+        static CCWeights NESWeights() {
             ColdClear.CcDefaultWeights(out CCWeights weights);
-            weights._Tslot = new int[] {
-                -1000,
-                -1000,
-                -1000,
-                -1000
-            };
+            for (int i = 0; i < 4; i++) {
+                weights.Tslot[i] = -1000;
+            }
             weights.Jeopardy = -20;
             weights.TopHalf = -1000;
             weights.ComboGarbage = 0;
@@ -253,6 +250,13 @@ namespace ColdTaco
             weights.BumpinessSq = -12;
             weights.WastedT = 0;
             weights.Height = -78;
+            return weights;
+        }
+        static void ApiEnabled() {
+            Console.WriteLine("API enabled");
+            ApiSource.API.reset();
+            CCOptions options = NESOptions();
+            CCWeights weights = NESWeights();
             bot = ColdClear.CcLaunchAsync(ref options, ref weights);
         }
         static void ApiDisabled() {
