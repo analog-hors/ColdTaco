@@ -33,8 +33,8 @@ namespace ColdTaco
         static int framesSinceSpawn;
         static int[] lineClears;
         const int lineClearStatRectX = 185;
-        const int lineClearStatRectY = 185;
-        const int lineClearStatRectPadding = 2;
+        const int lineClearStatRectY = 183;
+        const int lineClearStatRectPadding = 1;
         static bool resetComplete = false;
         static CCMove move;
         static int currentLevel;
@@ -228,19 +228,23 @@ namespace ColdTaco
             ++framesSinceSpawn;
             prevGameState = gameState;
             ApiSource.API.setColor(Colors.BLACK);
-            int width = ApiSource.API.getStringWidth("Quad 999", true);
-            ApiSource.API.fillRect(lineClearStatRectX, lineClearStatRectY, width + lineClearStatRectPadding * 2, lineClears.Length * 9 + lineClearStatRectPadding * 2);
+            int width = ApiSource.API.getStringWidth("QUAD 999", true);
+            ApiSource.API.fillRect(lineClearStatRectX, lineClearStatRectY, width + lineClearStatRectPadding * 2, (lineClears.Length + 1) * 9 + lineClearStatRectPadding * 2);
             ApiSource.API.setColor(Colors.WHITE);
+            float clearedLines = 0;
             for (int i = 0; i < lineClears.Length; i++) {
+                clearedLines += lineClears[i] * (i + 1);
                 string text = i switch {
                     0 => "SING",
                     1 => "DOBL",
                     2 => "TRIP",
-                    3 => "QUAD",
+                    3 => "TETR",
                     _ => "NANI"
                 } + " " + lineClears[i].ToString("D3");
                 ApiSource.API.drawString(text, lineClearStatRectX + lineClearStatRectPadding, lineClearStatRectY + (lineClears.Length - i - 1) * 9 + lineClearStatRectPadding, true);
             }
+            float tetrisRate = lineClears[3] * 4 / clearedLines * 100;
+            ApiSource.API.drawString("TET% " + Math.Floor(tetrisRate).ToString("000"), lineClearStatRectX + lineClearStatRectPadding, lineClearStatRectY + lineClears.Length * 9 + lineClearStatRectPadding, true);
         }
         static void StatusChanged(string message) {
             Console.WriteLine("Status message: {0}", message);
