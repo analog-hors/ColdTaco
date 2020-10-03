@@ -116,14 +116,21 @@ namespace ColdTaco
                 int level = ApiSource.API.peekCPU(Addresses.LEVEL);
                 if (currentLevel != level) {
                     currentLevel = level;
-                    if (level == 29) {
+                    if (level == 28) {
                         ColdClear.CcDestroyAsync(bot);
                         CCOptions options = NESOptions();
                         CCWeights weights = NESWeights();
-                        weights.Clear1 = 5;
-                        weights.Clear2 = 10;
-                        weights.Clear3 = 20;
-                        weights.MaxWellDepth = 4;
+                        weights.Clear1 = 30;
+                        weights.Clear2 = 45;
+                        weights.Clear3 = 60;
+                        weights.Clear4 = 60;
+                        weights.MaxWellDepth = 0;
+                        for (int i = 0; i < 10; i++) {
+                            weights.WellColumn[i] = -20;
+                        }
+                        weights.WellColumn[4] = 100;
+                        weights.WellColumn[5] = 100;
+                        weights.TopHalf = -5000;
                         bot = ColdClear.CcLaunchAsync(ref options, ref weights);
                         ResetBot();
                         ColdClear.CcAddNextPieceAsync(bot, tetriminoMap[ApiSource.API.peekCPU(Addresses.NEXT_PIECE_ID)]);
@@ -255,6 +262,7 @@ namespace ColdTaco
             options.UseHold = false;
             options.Pcloop = false;
             options.Speculate = true;
+            options.Threads = 2;
             return options;
         }
         static CCWeights NESWeights() {
@@ -262,16 +270,17 @@ namespace ColdTaco
             for (int i = 0; i < 4; i++) {
                 weights.Tslot[i] = -1000;
             }
-            weights.Jeopardy = -20;
+            weights.Jeopardy = -100;
             weights.TopHalf = -1000;
+            weights.TopQuarter = -5000;
             weights.ComboGarbage = 0;
             weights.CavityCells = -173 * 2;
             weights.CavityCellsSq = -3;
             weights.OverhangCells = -173 * 2;
             weights.OverhangCellsSq = -3;
-            weights.Clear1 = -71;
-            weights.Clear2 = -50;
-            weights.Clear3 = -29;
+            weights.Clear1 = -35;
+            weights.Clear2 = -25;
+            weights.Clear3 = -15;
             weights.WellColumn[0] = 100;
             weights.WellColumn[9] = 100;
             weights.Bumpiness = -14;
@@ -279,6 +288,7 @@ namespace ColdTaco
             weights.WastedT = 0;
             weights.Height = -78;
             weights.MaxWellDepth = 10;
+            weights.PerfectClear = 0;
             return weights;
         }
         static void ApiEnabled() {
