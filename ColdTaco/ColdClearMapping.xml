@@ -19,6 +19,7 @@
         <map param="cc_reset_async::field" attribute="buffer" type="bool" />
         <map function="cc_destroy_async" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />
         <map function="cc_launch_async" type="void" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />
+        <map function="cc_launch_with_board_async" type="void" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />
         <map function="cc_reset_async" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />
         <map function="cc_add_next_piece_async" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />
         <map function="cc_poll_next_move" group="ColdClearSharp.ColdClear" dll='"cold_clear.dll"' />

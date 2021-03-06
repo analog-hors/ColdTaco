@@ -235,7 +235,7 @@ namespace ColdTaco
             ++framesSinceSpawn;
             prevGameState = gameState;
             ApiSource.API.setColor(Colors.BLACK);
-            int width = ApiSource.API.getStringWidth("QUAD 999", true);
+            int width = ApiSource.API.getStringWidth("TETR 999", true);
             ApiSource.API.fillRect(lineClearStatRectX, lineClearStatRectY, width + lineClearStatRectPadding * 2, (lineClears.Length + 1) * 9 + lineClearStatRectPadding * 2);
             ApiSource.API.setColor(Colors.WHITE);
             float clearedLines = 0;
